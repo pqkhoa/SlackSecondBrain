@@ -1,26 +1,35 @@
 import os
 import json
-import anthropic
+from openai import OpenAI
 from memory import append_to_memory
 import config
 
-client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-MODEL = "claude-sonnet-4-20250514"
+client = OpenAI(
+    base_url="https://integrate.api.nvidia.com/v1",
+    api_key=os.environ.get("NVIDIA_API_KEY"),
+)
+MODEL = "anthropic/claude-opus-4-5"
+
+
+def _chat(system: str, user: str, max_tokens: int) -> str:
+    response = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    )
+    return response.choices[0].message.content.strip()
 
 
 def classify_and_save(text: str, source_user: str = ""):
-    """
-    Ask Claude if a message is worth saving, and if so, which topic.
-    Silently saves to memory if relevant.
-    """
     if len(text.strip()) < config.MIN_MESSAGE_LENGTH:
         return
 
     topics_list = ", ".join(config.TOPICS)
 
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=200,
+    raw = _chat(
         system=(
             "You are a memory classifier. Given a Slack message, decide:\n"
             "1. Is it worth saving as a memory? (ignore greetings, noise, trivial chat)\n"
@@ -32,10 +41,9 @@ def classify_and_save(text: str, source_user: str = ""):
             '{"save": false}\n'
             "No other text."
         ),
-        messages=[{"role": "user", "content": text}],
+        user=text,
+        max_tokens=200,
     )
-
-    raw = response.content[0].text.strip()
 
     try:
         result = json.loads(raw)
@@ -50,54 +58,31 @@ def classify_and_save(text: str, source_user: str = ""):
 
 
 def draft_reply(incoming_message: str, memory_context: str, from_user: str = "") -> str:
-    """
-    Draft a reply to an @mention or DM using memory context.
-    """
     from_label = f"from Slack user ID {from_user}" if from_user else "from a Slack user"
 
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=300,
+    return _chat(
         system=config.REPLY_STYLE,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Memory context about {config.YOUR_NAME}:\n{memory_context}\n\n"
-                    f"---\n\n"
-                    f"Incoming message {from_label}:\n{incoming_message}\n\n"
-                    f"Draft a reply as {config.YOUR_NAME}."
-                ),
-            }
-        ],
+        user=(
+            f"Memory context about {config.YOUR_NAME}:\n{memory_context}\n\n"
+            f"---\n\n"
+            f"Incoming message {from_label}:\n{incoming_message}\n\n"
+            f"Draft a reply as {config.YOUR_NAME}."
+        ),
+        max_tokens=300,
     )
-
-    return response.content[0].text.strip()
 
 
 def draft_reply_to_target(
     instruction: str, memory_context: str, target_user_id: str
 ) -> str:
-    """
-    Draft a reply based on an explicit instruction from the user.
-    Example instruction: "Tell him I'll join at 3pm"
-    """
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=300,
+    return _chat(
         system=config.REPLY_STYLE,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"Memory context about {config.YOUR_NAME}:\n{memory_context}\n\n"
-                    f"---\n\n"
-                    f"{config.YOUR_NAME} wants to send a message to Slack user <@{target_user_id}>.\n"
-                    f"Instruction from {config.YOUR_NAME}: {instruction}\n\n"
-                    f"Draft the message as {config.YOUR_NAME}."
-                ),
-            }
-        ],
+        user=(
+            f"Memory context about {config.YOUR_NAME}:\n{memory_context}\n\n"
+            f"---\n\n"
+            f"{config.YOUR_NAME} wants to send a message to Slack user <@{target_user_id}>.\n"
+            f"Instruction from {config.YOUR_NAME}: {instruction}\n\n"
+            f"Draft the message as {config.YOUR_NAME}."
+        ),
+        max_tokens=300,
     )
-
-    return response.content[0].text.strip()
