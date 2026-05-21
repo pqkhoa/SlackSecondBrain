@@ -2,6 +2,10 @@
 # config.py — Edit this file to customize your bot
 # ─────────────────────────────────────────────
 
+# Model hosted on inference.nvidia.com — change to any available model
+# Examples: "meta/llama-3.1-405b-instruct", "mistralai/mistral-large-2-instruct"
+MODEL = "anthropic/claude-opus-4-5"
+
 # Your name (used in reply drafts)
 YOUR_NAME = "Darren"
 

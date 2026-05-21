@@ -8,12 +8,11 @@ client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
     api_key=os.environ.get("NVIDIA_API_KEY"),
 )
-MODEL = "anthropic/claude-opus-4-5"
 
 
 def _chat(system: str, user: str, max_tokens: int) -> str:
     response = client.chat.completions.create(
-        model=MODEL,
+        model=config.MODEL,
         max_tokens=max_tokens,
         messages=[
             {"role": "system", "content": system},
